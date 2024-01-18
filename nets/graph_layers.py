@@ -557,7 +557,7 @@ class MultiHeadDecoder(nn.Module):
             param.data.uniform_(-stdv, stdv)
         
         
-    def forward(self, problem, h_em, solutions, step_info, x_in, top2, visited_order_map, epsilon_info = None, fixed_action = None, require_entropy = False, do_sample = True):
+    def forward(self, problem, h_em, solutions, action_his, step_info, x_in, top2, visited_order_map, epsilon_info = None, fixed_action = None, require_entropy = False, do_sample = True):
         # size info
         dy_size, dy_t = step_info
 
@@ -606,10 +606,14 @@ class MultiHeadDecoder(nn.Module):
         dy_pos = gs - dy_size + dy_t
         action_removal = torch.full((bs, 1), fill_value=dy_pos, dtype=torch.long).to(h_em.device)
 
+        if action_his is not None:
+            action_his.scatter_(1, action_removal, True)
+            action_his.scatter_(1, action_removal + dy_half_pos, True)
+
         ############# action2 insert into current routes
         pos_pickup = action_removal.view(-1)
         pos_delivery = pos_pickup + dy_half_pos
-        mask_table = problem.get_swap_mask(action_removal, visited_order_map, step_info, top2).expand(bs, gs, gs).cpu()
+        mask_table = problem.get_swap_mask(action_removal, visited_order_map, step_info, action_his, top2).expand(bs, gs, gs).cpu()
         if TYPE_REINSERTION == 'N2S':
             action_reinsertion_table = torch.tanh(self.compater_reinsertion(h, pos_pickup, pos_delivery, solutions, mask_table)) * self.range
         elif TYPE_REINSERTION == 'random':

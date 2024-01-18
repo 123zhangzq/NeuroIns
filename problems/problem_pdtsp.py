@@ -30,7 +30,7 @@ class PDTSP(object):
         return visited_time.view(bs, gs, 1) > visited_time.view(bs, 1, gs)
 
         
-    def get_real_mask(self, selected_node, visited_order_map, step_info):
+    def get_real_mask(self, selected_node, visited_order_map, step_info, action_his):
         dy_size, dy_t = step_info
         bs, gs, _ = visited_order_map.size()
 
@@ -44,17 +44,14 @@ class PDTSP(object):
         mask[torch.arange(bs),:,selected_node_corresponding.view(-1)] = True
 
         # mask the un-inserted dynamic orders
-        un_insert_dy_orders = gs - dy_size + dy_t
+        dy_orders_ind = gs - dy_size
         dy_orders_end = gs - dy_size + dy_size // 2
-        un_insert_dy_orders_co = un_insert_dy_orders + dy_size // 2
-
-        index_range = torch.arange(un_insert_dy_orders, dy_orders_end)
-        index_range_o = torch.arange(un_insert_dy_orders_co, gs)
-
-        mask[:, index_range, :] = True
-        mask[:, :, index_range] = True
-        mask[:, index_range_o, :] = True
-        mask[:, :, index_range_o] = True
+        index_un_ins = torch.zeros_like(action_his, dtype=torch.bool, device=action_his.device)
+        index_un_ins[:, dy_orders_ind:] = action_his[:, dy_orders_ind:] == False
+        index_un_ins_row = index_un_ins.unsqueeze(2).expand(-1, -1, gs)
+        index_un_ins_col = index_un_ins.unsqueeze(1).expand(-1, gs, -1)
+        mask_index_un_ins = torch.logical_or(index_un_ins_row, index_un_ins_col)
+        mask[mask_index_un_ins] = True
 
 
         return mask
@@ -228,8 +225,8 @@ class PDTSP(object):
         print("check all the feasibilities!!!")
     
     
-    def get_swap_mask(self, selected_node, visited_order_map, step_info, top2=None):
-        return self.get_real_mask(selected_node, visited_order_map, step_info)
+    def get_swap_mask(self, selected_node, visited_order_map, step_info, action_his, top2=None):
+        return self.get_real_mask(selected_node, visited_order_map, step_info, action_his)
         
     
     def get_costs(self, batch, rec, flag_finish=False):

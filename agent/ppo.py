@@ -138,12 +138,14 @@ class PPO:
         reward = []
 
         dy_size = problem.size - 2 * problem.static_orders
+        action_his = torch.zeros_like(padded_solution, dtype=torch.bool, device=padded_solution.device)
         for t in tqdm(range(dy_size // 2), disable = self.opts.no_progress_bar or not show_bar, desc = 'rollout', bar_format='{l_bar}{bar:20}{r_bar}{bar:-20b}'):
             step_info = (dy_size, t)
             # pass through model
             exchange = self.actor(problem,
                                   batch_feature,
                                   padded_solution,
+                                  action_his,
                                   step_info,
                                   do_sample = do_sample)[0]
 
@@ -356,6 +358,7 @@ def train_batch(
 
     dy_size = problem.size - 2 * problem.static_orders
     t = 0
+    action_his = torch.zeros_like(padded_solution, dtype=torch.bool, device=padded_solution.device)
     while t < (dy_size // 2):
 
         memory.states.append(padded_solution)
@@ -366,6 +369,7 @@ def train_batch(
         exchange, log_lh, _to_critic, entro_p, CI_action = agent.actor(problem,
                                                              batch_feature,
                                                              padded_solution,
+                                                             action_his,
                                                              step_info,
                                                              epsilon_info = epsilon_info,
                                                              do_sample = True,
@@ -427,12 +431,14 @@ def train_batch(
             bl_val_detached = []
             bl_val = []
 
+            action_his = torch.zeros_like(padded_solution, dtype=torch.bool, device=padded_solution.device)
             for tt in range(t_time):
                 # get new action_prob
                 step_info_ = (dy_size, tt)
                 _, log_p, _to_critic, entro_p, CI_action = agent.actor(problem,
                                                             batch_feature,
                                                             old_states[tt],
+                                                            action_his,
                                                             step_info_,
                                                             fixed_action = old_actions[tt],
                                                             require_entropy = True,# take same action
