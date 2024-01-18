@@ -692,15 +692,6 @@ class MultiHeadDecoder(nn.Module):
             cost_insert_d[zero_indices] = (d_deli  - d_i).norm(p=2, dim=2)[zero_indices]
 
             action_reinsertion_table = - (cost_insert_p.view(bs, gs, 1) + cost_insert_d.view(bs, 1, gs))
-
-            # p and d insert after the same node
-            cost_insert_same_node = -((d_pick  - d_i).norm(p=2, dim=2) + (d_pick  - d_deli).norm(p=2, dim=2) +\
-                                    (d_deli  - d_i_next).norm(p=2, dim=2) - (d_i  - d_i_next).norm(p=2, dim=2))
-            cost_insert_same_node[zero_indices] = (-(d_pick - d_i).norm(p=2, dim=2)  - (d_pick  - d_deli).norm(p=2, dim=2))[zero_indices]
-
-            action_reinsertion_table.diagonal(dim1=-2, dim2=-1).zero_()
-            diagonal_matrix = torch.diag_embed(cost_insert_same_node)
-            action_reinsertion_table += diagonal_matrix
             ######################## above is the CI#######################
 
             action_reinsertion_table_random = torch.ones(bs, gs, gs).to(h_em.device)
@@ -781,16 +772,6 @@ class MultiHeadDecoder(nn.Module):
         cost_insert_d[zero_indices] = (d_deli - d_i).norm(p=2, dim=2)[zero_indices]
 
         action_reinsertion_table = - (cost_insert_p.view(bs, gs, 1) + cost_insert_d.view(bs, 1, gs))
-
-        # p and d insert after the same node
-        cost_insert_same_node = -((d_pick - d_i).norm(p=2, dim=2) + (d_pick - d_deli).norm(p=2, dim=2) + \
-                                  (d_deli - d_i_next).norm(p=2, dim=2) - (d_i - d_i_next).norm(p=2, dim=2))
-        cost_insert_same_node[zero_indices] = (-(d_pick - d_i).norm(p=2, dim=2) - (d_pick - d_deli).norm(p=2, dim=2))[
-            zero_indices]
-
-        action_reinsertion_table.diagonal(dim1=-2, dim2=-1).zero_()
-        diagonal_matrix = torch.diag_embed(cost_insert_same_node)
-        action_reinsertion_table += diagonal_matrix
 
         action_reinsertion_table[mask_table] = -1e20
 
