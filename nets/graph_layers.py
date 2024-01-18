@@ -663,7 +663,7 @@ class MultiHeadDecoder(nn.Module):
             action_reinsertion_table = torch.ones(bs, gs, gs).to(h_em.device)
         else:
             
-            # epi-greedy
+            # greedy
             pos_pickup = action_removal
             pos_delivery = pos_pickup + dy_half_pos
             rec_new = solutions.clone()
@@ -750,44 +750,47 @@ class MultiHeadDecoder(nn.Module):
         else:
             entropy = None
 
-
         # action of CI
         pos_pickup = action_removal
         pos_delivery = pos_pickup + dy_half_pos
         rec_new = solutions.clone()
-
         first_row = torch.arange(gs, device=solutions.device).long().unsqueeze(0).expand(bs, gs)
         d_i = x_in.gather(1, first_row.unsqueeze(-1).expand(bs, gs, 2))
         d_i_next = x_in.gather(1, rec_new.long().unsqueeze(-1).expand(bs, gs, 2))
         d_pick = x_in.gather(1, pos_pickup.unsqueeze(1).expand(bs, gs, 2))
         d_deli = x_in.gather(1, pos_delivery.unsqueeze(1).expand(bs, gs, 2))
-        cost_insert_p = (d_pick - d_i).norm(p=2, dim=2) + (d_pick - d_i_next).norm(p=2, dim=2) - (d_i - d_i_next).norm(
+        cost_insert_p = (d_pick - d_i).norm(p=2, dim=2) + (d_pick - d_i_next).norm(p=2, dim=2) - (
+                    d_i - d_i_next).norm(
             p=2, dim=2)
-        cost_insert_d = (d_deli - d_i).norm(p=2, dim=2) + (d_deli - d_i_next).norm(p=2, dim=2) - (d_i - d_i_next).norm(
+        cost_insert_d = (d_deli - d_i).norm(p=2, dim=2) + (d_deli - d_i_next).norm(p=2, dim=2) - (
+                    d_i - d_i_next).norm(
             p=2, dim=2)
-
         # not to return depot
         zero_indices = (solutions == 0).to(torch.bool)
         cost_insert_p[zero_indices] = (d_pick - d_i).norm(p=2, dim=2)[zero_indices]
         cost_insert_d[zero_indices] = (d_deli - d_i).norm(p=2, dim=2)[zero_indices]
-
         action_reinsertion_table = - (cost_insert_p.view(bs, gs, 1) + cost_insert_d.view(bs, 1, gs))
-
+        cost_insert_same_node = -((d_pick - d_i).norm(p=2, dim=2) + (d_pick - d_deli).norm(p=2, dim=2) + \
+                                  (d_deli - d_i_next).norm(p=2, dim=2) - (d_i - d_i_next).norm(p=2, dim=2))
+        cost_insert_same_node[zero_indices] = \
+        (-(d_pick - d_i).norm(p=2, dim=2) - (d_pick - d_deli).norm(p=2, dim=2))[
+            zero_indices]
+        action_reinsertion_table.diagonal(dim1=-2, dim2=-1).zero_()
+        diagonal_matrix = torch.diag_embed(cost_insert_same_node)
+        action_reinsertion_table += diagonal_matrix
         action_reinsertion_table[mask_table] = -1e20
-
         action_reinsertion_table = action_reinsertion_table.view(bs, -1)
-
-        probs_reinsertion = F.softmax(action_reinsertion_table, dim = -1)
-
+        probs_reinsertion = F.softmax(action_reinsertion_table, dim=-1)
         action_reinsertion_greedy = probs_reinsertion.max(-1)[1].unsqueeze(1)
-
         pair_index = action_reinsertion_greedy
-
         p_selected_GI = pair_index // gs
         d_selected_GI = pair_index % gs
-        GI_action = torch.cat((action_removal.view(bs, -1), p_selected_GI, d_selected_GI), -1)  # pair: no_head bs, 2
-
+        GI_action = torch.cat((action_removal.view(bs, -1), p_selected_GI, d_selected_GI),
+                              -1)  # pair: no_head bs, 2
         del visited_order_map, mask_table
+        # end GI
+
+
         return action, log_ll, entropy, GI_action
 
 
