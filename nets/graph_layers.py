@@ -5,8 +5,8 @@ import numpy as np
 from torch import nn
 import math
 
-TYPE_REMOVAL = 'N2S'
-#TYPE_REMOVAL = 'random'
+#TYPE_REMOVAL = 'N2S'
+TYPE_REMOVAL = 'random'
 #TYPE_REMOVAL = 'greedy'
 
 TYPE_REINSERTION = 'N2S'
@@ -351,6 +351,30 @@ class CompatNeighbour(nn.Module):
         
         return  compatibility_pairing
 
+
+class LinearSelect(nn.Module):
+    def __init__(
+            self,
+            embed_dim
+    ):
+        super(LinearSelect, self).__init__()
+        self.embed_dim = embed_dim
+
+        # self.agg = MLP(self.embed_dim, 64, 64, 1, 0)
+        self.proj = nn.Linear(self.embed_dim, 1, bias=False)
+
+        self.init_parameters()
+
+    def init_parameters(self):
+        for param in self.parameters():
+            stdv = 1. / math.sqrt(param.size(-1))
+            param.data.uniform_(-stdv, stdv)
+
+    def forward(self, h):
+        compatibility_pairing = self.proj(h).squeeze()
+
+        return compatibility_pairing
+
 class Reinsertion(nn.Module):
     def __init__(
             self,
@@ -535,11 +559,7 @@ class MultiHeadDecoder(nn.Module):
         self.range = v_range
         
         if TYPE_REMOVAL == 'N2S':
-            self.compater_removal = CompatNeighbour(n_heads,
-                                            embed_dim,
-                                            embed_dim,
-                                            embed_dim,
-                                            key_dim)
+            self.select_order = LinearSelect(embed_dim)
         if TYPE_REINSERTION == 'N2S':
             self.compater_reinsertion = Reinsertion(n_heads,
                                             embed_dim,
@@ -572,43 +592,66 @@ class MultiHeadDecoder(nn.Module):
         
 
         ############# action1 removal
-        # if TYPE_REMOVAL == 'N2S':
-        #     action_removal_table = torch.tanh(self.compater_removal(h, solutions, visited_order_map, selection_sig).squeeze()) * self.range
-        #     if pre_action is not None and pre_action[0,0] > 0:
-        #         action_removal_table[arange, pre_action[:,0]] = -1e20
-        #     log_ll_removal = F.log_softmax(action_removal_table, dim = -1) if self.training and TYPE_REMOVAL == 'N2S' else None
-        #     probs_removal = F.softmax(action_removal_table, dim = -1)
-        # elif TYPE_REMOVAL == 'random':
-        #     probs_removal = torch.rand(bs, gs//2).to(h_em.device)
-        # else:
-        #     # epi-greedy
-        #     first_row = torch.arange(gs, device = solutions.device).long().unsqueeze(0).expand(bs, gs)
-        #     d_i =  x_in.gather(1, first_row.unsqueeze(-1).expand(bs, gs, 2))
-        #     d_i_next = x_in.gather(1, solutions.long().unsqueeze(-1).expand(bs, gs, 2))
-        #     d_i_pre = x_in.gather(1, solutions.argsort().long().unsqueeze(-1).expand(bs, gs, 2))
-        #     cost_ = ((d_i_pre  - d_i).norm(p=2, dim=2) + (d_i  - d_i_next).norm(p=2, dim=2) - (d_i_pre  - d_i_next).norm(p=2, dim=2))[:,1:]
-        #     probs_removal = (cost_[:,:gs//2] + cost_[:,gs//2:])
-        #     probs_removal_random = torch.rand(bs, gs//2).to(h_em.device)
-        #
-        # if fixed_action is not None:
-        #     action_removal = fixed_action[:,:1]
-        # else:
-        #     if TYPE_REMOVAL == 'greedy':
-        #         action_removal_random = probs_removal_random.multinomial(1)
-        #         action_removal_greedy = probs_removal.max(-1)[1].unsqueeze(1)
-        #         action_removal = torch.where(torch.rand(bs,1).to(h_em.device) < 0.1, action_removal_random, action_removal_greedy)
-        #     else:
-        #         action_removal = probs_removal.multinomial(1)
-        # selected_log_ll_action1 = log_ll_removal.gather(1, action_removal) if self.training and TYPE_REMOVAL == 'N2S' else torch.tensor(0).to(h.device)
+        if TYPE_REMOVAL == 'N2S':
+            action_removal_table = torch.tanh(self.select_order(h).squeeze()) * self.range
 
+            # mask the other nodes apart from candidates
+            dy_delivery = int(gs - dy_size + dy_size / 2)
 
-        ############ action1 select dynamic orders
-        dy_pos = gs - dy_size + dy_t
-        action_removal = torch.full((bs, 1), fill_value=dy_pos, dtype=torch.long).to(h_em.device)
+            action_removal_table[arange, :int(gs - dy_size)] = -1e20
+            action_removal_table[arange, dy_delivery:] = -1e20
+
+            mask_selected = torch.zeros_like(action_removal_table, dtype=torch.bool, device=action_removal_table.device)
+            mask_selected[solutions != 0] = True
+            action_removal_table[mask_selected] = -1e20
+
+            log_ll_removal = F.log_softmax(action_removal_table,
+                                           dim=-1) if self.training and TYPE_REMOVAL == 'N2S' else None
+            probs_removal = F.softmax(action_removal_table, dim=-1)
+        elif TYPE_REMOVAL == 'random':
+            probs_removal = torch.rand(bs, gs // 2).to(h_em.device)
+        else:
+            pass
+            # epi-greedy
+            # first_row = torch.arange(gs, device = solutions.device).long().unsqueeze(0).expand(bs, gs)
+            # d_i =  x_in.gather(1, first_row.unsqueeze(-1).expand(bs, gs, 2))
+            # d_i_next = x_in.gather(1, solutions.long().unsqueeze(-1).expand(bs, gs, 2))
+            # d_i_pre = x_in.gather(1, solutions.argsort().long().unsqueeze(-1).expand(bs, gs, 2))
+            # cost_ = ((d_i_pre  - d_i).norm(p=2, dim=2) + (d_i  - d_i_next).norm(p=2, dim=2) - (d_i_pre  - d_i_next).norm(p=2, dim=2))[:,1:]
+            # probs_removal = (cost_[:,:gs//2] + cost_[:,gs//2:])
+            # probs_removal_random = torch.rand(bs, gs//2).to(h_em.device)
+
+        if fixed_action is not None:
+            action_removal = fixed_action[:, :1]
+        else:
+            if TYPE_REMOVAL == 'random':
+                dy_pos = gs - dy_size + dy_t
+                action_removal = torch.full((bs, 1), fill_value=dy_pos, dtype=torch.long).to(h_em.device)
+                # action_removal_random = probs_removal_random.multinomial(1)
+                # action_removal_greedy = probs_removal.max(-1)[1].unsqueeze(1)
+                # action_removal = torch.where(torch.rand(bs,1).to(h_em.device) < 0.1, action_removal_random, action_removal_greedy)
+            else:
+                if do_sample:
+                    action_removal = probs_removal.multinomial(1)
+                else:
+                    action_removal = probs_removal.max(-1)[1].unsqueeze(1)
+
+        selected_log_ll_action1 = log_ll_removal.gather(1,
+                                                        action_removal) if self.training and TYPE_REMOVAL == 'N2S' else torch.tensor(
+            0).to(h.device)
 
         if action_his is not None:
             action_his.scatter_(1, action_removal, True)
             action_his.scatter_(1, action_removal + dy_half_pos, True)
+
+
+        # ############ action1 select dynamic orders
+        # dy_pos = gs - dy_size + dy_t
+        # action_removal = torch.full((bs, 1), fill_value=dy_pos, dtype=torch.long).to(h_em.device)
+        #
+        # if action_his is not None:
+        #     action_his.scatter_(1, action_removal, True)
+        #     action_his.scatter_(1, action_removal + dy_half_pos, True)
 
         ############# action2 insert into current routes
         pos_pickup = action_removal.view(-1)
