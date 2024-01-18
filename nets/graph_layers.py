@@ -5,8 +5,8 @@ import numpy as np
 from torch import nn
 import math
 
-#TYPE_REMOVAL = 'N2S'
-TYPE_REMOVAL = 'random'
+TYPE_REMOVAL = 'N2S'
+#TYPE_REMOVAL = 'random'
 #TYPE_REMOVAL = 'greedy'
 
 TYPE_REINSERTION = 'N2S'
@@ -750,8 +750,8 @@ class MultiHeadDecoder(nn.Module):
         
         selected_log_ll_action2 = log_ll_reinsertion.gather(1, pair_index)  if self.training and TYPE_REINSERTION == 'N2S' else torch.zeros((bs, 1)).to(h.device)
         
-        # log_ll = selected_log_ll_action1 + selected_log_ll_action2
-        log_ll = selected_log_ll_action2
+        log_ll = selected_log_ll_action1 + selected_log_ll_action2
+        # log_ll = selected_log_ll_action2
         
         if require_entropy and self.training:
             dist = Categorical(probs_reinsertion, validate_args=False)
