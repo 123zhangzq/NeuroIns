@@ -46,13 +46,13 @@ class Actor(nn.Module):
                             self.embedding_dim,
                             self.seq_length)
         
-        self.encoder = mySequential(*(
-                MultiHeadEncoder_1(self.n_heads_actor,
-                                self.embedding_dim,
-                                self.hidden_dim,
-                                self.normalization,
-                                )
-            for _ in range(self.n_layers))) # for NFEs
+        # self.encoder = mySequential(*(
+        #         MultiHeadEncoder_1(self.n_heads_actor,
+        #                         self.embedding_dim,
+        #                         self.hidden_dim,
+        #                         self.normalization,
+        #                         )
+        #     for _ in range(self.n_layers))) # for NFEs
 
         self.encoder_l2n = mySequential(*(
                 MultiHeadEncoder(self.n_heads_actor,
