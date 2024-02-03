@@ -86,9 +86,9 @@ class Actor(nn.Module):
         h_embed, h_pos, visited_time, top2 = self.embedder(x_in, solution, step_info, self.clac_stacks)
         
         # pass through encoder
-        # pos_em = self.pos_encoder(h_pos)
-        # h_em = self.encoder(h_embed, pos_em)[0]
-        h_em = h_embed + h_pos
+        pos_em = self.pos_encoder(h_pos)
+        h_em = self.encoder(h_embed, pos_em)[0]
+
 
         
         if only_critic:
