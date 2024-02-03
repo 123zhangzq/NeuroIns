@@ -54,13 +54,13 @@ class Actor(nn.Module):
                                 )
             for _ in range(self.n_layers))) # for NFEs
 
-        # self.encoder_l2n = mySequential(*(
-        #         MultiHeadEncoder(self.n_heads_actor,
-        #                         self.embedding_dim,
-        #                         self.hidden_dim,
-        #                         self.normalization,
-        #                         )
-        #     for _ in range(self.n_layers))) # for the following layers of NFEs
+        self.encoder_l2n = mySequential(*(
+                MultiHeadEncoder(self.n_heads_actor,
+                                self.embedding_dim,
+                                self.hidden_dim,
+                                self.normalization,
+                                )
+            for _ in range(self.n_layers))) # for the following layers of NFEs
 
         # self.pos_encoder = MultiHeadPosCompat(self.n_heads_actor,
         #                         self.embedding_dim,
@@ -89,6 +89,7 @@ class Actor(nn.Module):
         # pos_em = self.pos_encoder(h_pos)
         # h_em = self.encoder(h_embed, pos_em)[0]
         h_em = h_embed + h_pos
+        h_em = self.encoder_l2n(h_em)
 
 
         
