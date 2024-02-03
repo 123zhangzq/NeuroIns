@@ -62,10 +62,10 @@ class Actor(nn.Module):
         #                         )
         #     for _ in range(self.n_layers))) # for the following layers of NFEs
 
-        self.pos_encoder = MultiHeadPosCompat(self.n_heads_actor, 
-                                self.embedding_dim, 
-                                self.hidden_dim, 
-                                ) # for PFEs
+        # self.pos_encoder = MultiHeadPosCompat(self.n_heads_actor,
+        #                         self.embedding_dim,
+        #                         self.hidden_dim,
+        #                         ) # for PFEs
         
         self.decoder = MultiHeadDecoder(input_dim = self.embedding_dim, 
                                         embed_dim = self.embedding_dim,
